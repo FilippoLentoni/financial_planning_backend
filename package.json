@@ -1,0 +1,31 @@
+{
+  "name": "financial-planning-backend",
+  "version": "1.0.0",
+  "private": true,
+  "bin": {
+    "financial-planning-backend": "bin/app.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "npm run build && python3 evaluator/test_eval_config.py",
+    "synth": "cdk synth",
+    "deploy:pipeline": "cdk deploy FinancialPlanningBackendPipelineStack",
+    "deploy:personal": "cdk deploy FinancialPlanningBackend-PersonalStack",
+    "deploy:alpha": "cdk deploy FinancialPlanningBackend-AlphaStack",
+    "deploy:gamma": "cdk deploy FinancialPlanningBackend-GammaStack",
+    "deploy:prod": "cdk deploy FinancialPlanningBackend-ProdStack"
+  },
+  "dependencies": {
+    "@aws-cdk/aws-bedrock-agentcore-alpha": "^2.252.0-alpha.0",
+    "@aws-cdk/aws-bedrock-alpha": "^2.252.0-alpha.0",
+    "aws-cdk-lib": "^2.252.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "aws-cdk": "^2.252.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
