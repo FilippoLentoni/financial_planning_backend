@@ -1,0 +1,4 @@
+{"question":"What is 2 + 2?","expected":"4"}
+{"question":"Use the health check tool and summarize the status.","expected":"ok"}
+{"question":"List the available financial planning gateways and tools.","expected":"portfolio-planning"}
+{"question":"Create a moderate 16-week portfolio plan and explain that it is synthetic, not financial advice.","expected":"synthetic"}

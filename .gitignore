@@ -1,0 +1,15 @@
+node_modules/
+cdk.out/
+dist/
+*.js
+*.d.ts
+*.js.map
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.DS_Store
+.env
+.cdk.staging/
+cdk-outputs.json
+cdk-pipeline-outputs.json
