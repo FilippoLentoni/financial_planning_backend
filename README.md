@@ -7,6 +7,8 @@ This template assumes a future daily financial-data pipeline will populate portf
 ## What It Deploys
 
 - Bedrock AgentCore Runtime running a Strands agent with Nova 2 Lite by default.
+- Bedrock AgentCore Gateway with an IAM-protected MCP endpoint.
+- AgentCore Gateway Lambda target exposing the portfolio-planning tool catalog.
 - IAM-protected API Gateway endpoint for runtime invocation.
 - IAM-protected gateway discovery endpoint: `/gateways/iam`.
 - IAM-protected MCP-compatible proxy endpoint: `/mcp/proxy`.
@@ -18,9 +20,13 @@ This template assumes a future daily financial-data pipeline will populate portf
 
 | Gateway | Tools |
 | --- | --- |
-| `portfolio-planning` | `list-portfolios`, `get-portfolio-snapshot`, `get-market-context`, `run-portfolio-optimization`, `get-simulation-status`, `get-simulation-results`, `run-what-if-analysis`, `explain-trade-plan`, `record-weekly-review`, `generate-weekly-plan-report` |
+| `portfolio-planning` | `portfolio-planning___list-portfolios`, `portfolio-planning___get-portfolio-snapshot`, `portfolio-planning___get-market-context`, `portfolio-planning___run-portfolio-optimization`, `portfolio-planning___get-simulation-status`, `portfolio-planning___get-simulation-results`, `portfolio-planning___run-what-if-analysis`, `portfolio-planning___explain-trade-plan`, `portfolio-planning___record-weekly-review`, `portfolio-planning___generate-weekly-plan-report` |
 
 The current dummy optimizer generates a 16-week buy/sell plan from synthetic holdings, prices, expected returns, risk scores, and liquidity constraints. It is intentionally lightweight and deterministic. It is not financial advice.
+
+The backend uses one AgentCore Gateway per bounded business domain. The `portfolio-planning` Lambda target exposes multiple tools through a single MCP endpoint. That is the preferred default for a cohesive tool set because Gateway is designed to compose multiple targets and tools into one MCP server. Split into additional gateways only when security boundaries, ownership, deployment cadence, or scaling needs are materially different.
+
+AgentCore prefixes Lambda-target tool names with the target name. For this target, tools are discovered as `portfolio-planning___<tool-name>`.
 
 ## What Should Be A Tool Vs A Skill
 

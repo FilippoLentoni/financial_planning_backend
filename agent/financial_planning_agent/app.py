@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import boto3
 from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent, tool
 from strands_tools import calculator
+
+from financial_planning_agent.gateway import GatewayToolPool, pretty_tool_inventory
 
 app = BedrockAgentCoreApp()
 
@@ -169,14 +172,41 @@ def generate_weekly_plan_report(
 
 
 _agent: Agent | None = None
+_gateway_pool: GatewayToolPool | None = None
+
+
+def _load_skill_instructions() -> str:
+    skills_root = Path(__file__).parent / "skills"
+    parts = []
+    for skill_file in sorted(skills_root.glob("*/SKILL.md")):
+        parts.append(skill_file.read_text(encoding="utf-8"))
+    return "\n\n".join(parts)
+
+
+def _gateway_tools() -> list[Any]:
+    global _gateway_pool
+    if _gateway_pool is None:
+        try:
+            _gateway_pool = GatewayToolPool()
+        except Exception:
+            _gateway_pool = None
+            return []
+    return _gateway_pool.tools()
 
 
 def _agent_instance() -> Agent:
     global _agent
     if _agent is None:
+        gateway_tools = _gateway_tools()
         _agent = Agent(
             model=_model_id(),
             tools=[
+                calculator,
+                health_check,
+                *gateway_tools,
+            ]
+            if gateway_tools
+            else [
                 calculator,
                 health_check,
                 discover_gateways,
@@ -199,7 +229,9 @@ def _agent_instance() -> Agent:
                 "liquidity or forecast deviation, and prepare weekly review reports. "
                 "Never present output as financial advice. Clearly state that the current math "
                 "model and daily stock data are synthetic placeholders until the dedicated "
-                "portfolio model pipeline is connected through MCP."
+                "portfolio model pipeline is connected through MCP.\n\n"
+                f"Loaded gateway tools: {pretty_tool_inventory(gateway_tools)}\n\n"
+                f"{_load_skill_instructions()}"
             ),
             callback_handler=None,
         )

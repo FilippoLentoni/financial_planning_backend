@@ -101,6 +101,44 @@ export class FinancialPlanningBackendStack extends Stack {
     });
     langfuseSecret.grantRead(runtimeRole);
 
+    const api = new apigateway.RestApi(this, 'RuntimeApi', {
+      restApiName: `financial-planning-backend-${props.stage.name}`,
+      deployOptions: {
+        stageName: props.stage.name,
+        tracingEnabled: true,
+      },
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['POST', 'OPTIONS'],
+        allowHeaders: [
+          'Content-Type',
+          'Authorization',
+          'X-Amz-Date',
+          'X-Api-Key',
+          'X-Amz-Security-Token',
+          'X-Amz-Content-Sha256',
+        ],
+      },
+    });
+
+    const gateway = createGatewayResources(this, {
+      api,
+      toolFunction: tools.toolFunction,
+      stageName: props.stage.name,
+      runtimeRole,
+      removalPolicy,
+    });
+
+    runtimeRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock-agentcore:InvokeGateway'],
+        resources: [
+          gateway.agentCoreGatewayArn,
+          `${gateway.agentCoreGatewayArn}/gateway-endpoint/*`,
+        ],
+      }),
+    );
+
     const runtime = new Runtime(this, 'AgentRuntime', {
       runtimeName: props.stage.runtimeName,
       description: `Financial planning AgentCore runtime for ${props.stage.name}.`,
@@ -116,6 +154,8 @@ export class FinancialPlanningBackendStack extends Stack {
         AWS_REGION: this.region,
         MODEL_ID: DEFAULT_MODEL_ID,
         TOOL_FUNCTION_NAME: tools.toolFunction.functionName,
+        GATEWAY_URL: gateway.agentCoreGatewayUrl,
+        GATEWAY_REGION: this.region,
         EVAL_BUCKET: dataBucket.bucketName,
         LANGFUSE_SECRET_ARN: langfuseSecret.secretArn,
       },
@@ -156,35 +196,10 @@ export class FinancialPlanningBackendStack extends Stack {
       }),
     );
 
-    const api = new apigateway.RestApi(this, 'RuntimeApi', {
-      restApiName: `financial-planning-backend-${props.stage.name}`,
-      deployOptions: {
-        stageName: props.stage.name,
-        tracingEnabled: true,
-      },
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['POST', 'OPTIONS'],
-        allowHeaders: [
-          'Content-Type',
-          'Authorization',
-          'X-Amz-Date',
-          'X-Api-Key',
-          'X-Amz-Security-Token',
-          'X-Amz-Content-Sha256',
-        ],
-      },
-    });
     const runtimeResource = api.root.addResource('runtime');
     const invokeResource = runtimeResource.addResource('invoke');
     invokeResource.addMethod('POST', new apigateway.LambdaIntegration(runtimeProxyFn), {
       authorizationType: apigateway.AuthorizationType.IAM,
-    });
-
-    const gateway = createGatewayResources(this, {
-      api,
-      toolFunction: tools.toolFunction,
-      removalPolicy,
     });
 
     new CfnOutput(this, 'RuntimeArn', { value: runtime.agentRuntimeArn });
@@ -193,6 +208,8 @@ export class FinancialPlanningBackendStack extends Stack {
     new CfnOutput(this, 'RuntimeInvokeUrl', { value: `${api.url}runtime/invoke` });
     new CfnOutput(this, 'GatewaysUrl', { value: gateway.gatewaysUrl });
     new CfnOutput(this, 'McpProxyUrl', { value: gateway.mcpProxyUrl });
+    new CfnOutput(this, 'AgentCoreGatewayArn', { value: gateway.agentCoreGatewayArn });
+    new CfnOutput(this, 'AgentCoreGatewayUrl', { value: gateway.agentCoreGatewayUrl });
     new CfnOutput(this, 'ToolFunctionName', { value: tools.toolFunction.functionName });
     new CfnOutput(this, 'GatewayStateTableName', { value: tools.stateTable.tableName });
     new CfnOutput(this, 'EvalDataBucketName', { value: dataBucket.bucketName });

@@ -35,6 +35,7 @@ def test_public_gateway_tool_catalog() -> None:
     assert len(tools) >= 10
     assert any(tool["name"] == "run-portfolio-optimization" for tool in tools)
     assert any(tool["name"] == "generate-weekly-plan-report" for tool in tools)
+    assert module._normalize_tool_name("portfolio-planning___run-portfolio-optimization") == "run-portfolio-optimization"
 
 
 def test_mcp_proxy_local_gateway_contract() -> None:

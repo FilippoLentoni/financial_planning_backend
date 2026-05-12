@@ -174,6 +174,14 @@ def _response(status_code: int, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _agentcore_context_tool_name(context: Any) -> str:
+    client_context = getattr(context, "client_context", None)
+    custom = getattr(client_context, "custom", None) if client_context is not None else None
+    if not isinstance(custom, dict):
+        return ""
+    return str(custom.get("bedrockAgentCoreToolName") or "")
+
+
 def _json_safe(value: Any) -> Any:
     if isinstance(value, Decimal):
         return float(value)
@@ -618,8 +626,24 @@ TOOL_HANDLERS = {
 }
 
 
+def _normalize_tool_name(tool_name: str) -> str:
+    name = str(tool_name or "").strip()
+    if name in TOOL_HANDLERS:
+        return name
+    for delimiter in ("___", "__"):
+        if delimiter in name:
+            candidate = name.split(delimiter, 1)[1]
+            if candidate in TOOL_HANDLERS:
+                return candidate
+    for known in TOOL_HANDLERS:
+        if name.endswith(known):
+            return known
+    return name
+
+
 def invoke_tool(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-    handler = TOOL_HANDLERS.get(tool_name)
+    normalized = _normalize_tool_name(tool_name)
+    handler = TOOL_HANDLERS.get(normalized)
     if handler is None:
         raise ValueError(f"unknown tool: {tool_name}")
     return handler(args)
@@ -627,10 +651,16 @@ def invoke_tool(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
+        gateway_tool_name = _agentcore_context_tool_name(context)
+        if gateway_tool_name:
+            return _json_safe(invoke_tool(gateway_tool_name, event))
+
         tool_name = event.get("tool") or event.get("name")
         args = event.get("arguments") or event.get("args") or {}
         if not tool_name:
             return _response(400, {"error": "tool is required"})
         return _response(200, invoke_tool(str(tool_name), args))
     except Exception as exc:
+        if _agentcore_context_tool_name(context):
+            return {"error": str(exc)}
         return _response(400, {"error": str(exc)})
