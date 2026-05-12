@@ -19,6 +19,14 @@ def test_ping_module_imports() -> None:
     assert callable(ping_agent.invoke_agent)
 
 
+def test_agent_skills_are_discoverable() -> None:
+    module = _load_module("agent/financial_planning_agent/skill_registry.py", "skill_registry")
+    skills = module.loaded_skills(Path("agent/financial_planning_agent"))
+    assert [skill["name"] for skill in skills] == ["financial-planning-assistant"]
+    assert "portfolio optimization" in skills[0]["description"]
+    assert "portfolio-planning___run-portfolio-optimization" in skills[0]["allowedTools"]
+
+
 def _load_module(path: str, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
@@ -74,6 +82,7 @@ def test_mcp_proxy_local_gateway_contract() -> None:
 if __name__ == "__main__":
     test_sample_dataset_loads()
     test_ping_module_imports()
+    test_agent_skills_are_discoverable()
     test_public_gateway_tool_catalog()
     test_mcp_proxy_local_gateway_contract()
     print("OK")

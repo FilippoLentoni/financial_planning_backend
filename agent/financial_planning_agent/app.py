@@ -12,6 +12,12 @@ from strands import Agent, tool
 from strands_tools import calculator
 
 from financial_planning_agent.gateway import GatewayToolPool, pretty_tool_inventory
+from financial_planning_agent.skill_registry import load_skill_instructions, loaded_skills
+
+try:
+    from strands import AgentSkills
+except ImportError:
+    AgentSkills = None
 
 app = BedrockAgentCoreApp()
 
@@ -175,12 +181,10 @@ _agent: Agent | None = None
 _gateway_pool: GatewayToolPool | None = None
 
 
-def _load_skill_instructions() -> str:
-    skills_root = Path(__file__).parent / "skills"
-    parts = []
-    for skill_file in sorted(skills_root.glob("*/SKILL.md")):
-        parts.append(skill_file.read_text(encoding="utf-8"))
-    return "\n\n".join(parts)
+@tool
+def list_agent_skills() -> dict[str, Any]:
+    """List SKILL.md skills loaded by this Strands agent."""
+    return {"skills": loaded_skills()}
 
 
 def _gateway_tools() -> list[Any]:
@@ -194,21 +198,32 @@ def _gateway_tools() -> list[Any]:
     return _gateway_pool.tools()
 
 
+def _skills_plugin() -> Any:
+    if AgentSkills is None:
+        return None
+    return AgentSkills(skills=str(Path(__file__).parent / "skills"))
+
+
 def _agent_instance() -> Agent:
     global _agent
     if _agent is None:
         gateway_tools = _gateway_tools()
+        skills_plugin = _skills_plugin()
+        skill_fallback_instructions = "" if skills_plugin else f"\n\n{load_skill_instructions()}"
         _agent = Agent(
             model=_model_id(),
+            plugins=[skills_plugin] if skills_plugin else None,
             tools=[
                 calculator,
                 health_check,
+                list_agent_skills,
                 *gateway_tools,
             ]
             if gateway_tools
             else [
                 calculator,
                 health_check,
+                list_agent_skills,
                 discover_gateways,
                 discover_gateway_tools,
                 list_portfolios,
@@ -230,8 +245,13 @@ def _agent_instance() -> Agent:
                 "Never present output as financial advice. Clearly state that the current math "
                 "model and daily stock data are synthetic placeholders until the dedicated "
                 "portfolio model pipeline is connected through MCP.\n\n"
+                "When the user asks which skills are available, call list_agent_skills and "
+                "answer with skills first. Do not confuse skills with MCP tools. Skills are "
+                "SKILL.md operating procedures; tools are callable Gateway capabilities. "
+                "When a user request matches a skill, activate the skill before using tools.\n\n"
+                f"Loaded skills: {json.dumps(loaded_skills())}\n\n"
                 f"Loaded gateway tools: {pretty_tool_inventory(gateway_tools)}\n\n"
-                f"{_load_skill_instructions()}"
+                f"{skill_fallback_instructions}"
             ),
             callback_handler=None,
         )
