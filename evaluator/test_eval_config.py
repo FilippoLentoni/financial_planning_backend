@@ -91,6 +91,36 @@ def test_model_input_output_tools() -> None:
     assert decision["status"] == "RECORDED"
 
 
+def test_model_run_ledger_and_http_contract() -> None:
+    module = _load_module("lambda/tools/index.py", "backend_tools_ledger")
+    created = module.create_weekly_model_run({"source": "unit-test-pipeline"})
+    assert created["input_id"].startswith("model-input-")
+    assert created["run_id"].startswith("model-run-")
+
+    runs = module.list_model_runs({"limit": 5})
+    latest = runs["latest"]
+    assert latest["input_id"] == created["input_id"]
+    assert latest["run_id"] == created["run_id"]
+    assert latest["modelUsed"]["modelId"]
+    assert latest["createdAtIso"].endswith("Z")
+    assert runs["storage"]["recordTypes"] == [
+        "model-input",
+        "portfolio-optimization",
+        "model-input-override",
+    ]
+
+    response = module.handler(
+        {
+            "httpMethod": "GET",
+            "path": "/planning/runs",
+            "queryStringParameters": {"limit": "5"},
+        },
+        None,
+    )
+    assert response["statusCode"] == 200
+    assert "portfolio-optimization" in response["body"]
+
+
 def test_mcp_proxy_local_gateway_contract() -> None:
     module = _load_module("lambda/gateway-proxy/index.py", "gateway_proxy")
 
@@ -130,5 +160,6 @@ if __name__ == "__main__":
     test_agent_skills_are_discoverable()
     test_public_gateway_tool_catalog()
     test_model_input_output_tools()
+    test_model_run_ledger_and_http_contract()
     test_mcp_proxy_local_gateway_contract()
     print("OK")

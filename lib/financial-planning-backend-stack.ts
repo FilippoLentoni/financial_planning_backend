@@ -57,6 +57,7 @@ export class FinancialPlanningBackendStack extends Stack {
     const tools = createToolsResources(this, {
       stageName: props.stage.name,
       removalPolicy,
+      modelId: DEFAULT_MODEL_ID,
     });
 
     const runtimeRole = new iam.Role(this, 'AgentRuntimeRole', {
@@ -109,7 +110,7 @@ export class FinancialPlanningBackendStack extends Stack {
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['POST', 'OPTIONS'],
+        allowMethods: ['GET', 'POST', 'OPTIONS'],
         allowHeaders: [
           'Content-Type',
           'Authorization',
@@ -202,10 +203,20 @@ export class FinancialPlanningBackendStack extends Stack {
       authorizationType: apigateway.AuthorizationType.IAM,
     });
 
+    const planningResource = api.root.addResource('planning');
+    const runsResource = planningResource.addResource('runs');
+    runsResource.addMethod('GET', new apigateway.LambdaIntegration(tools.toolFunction), {
+      authorizationType: apigateway.AuthorizationType.IAM,
+    });
+    runsResource.addMethod('POST', new apigateway.LambdaIntegration(tools.toolFunction), {
+      authorizationType: apigateway.AuthorizationType.IAM,
+    });
+
     new CfnOutput(this, 'RuntimeArn', { value: runtime.agentRuntimeArn });
     new CfnOutput(this, 'RuntimeName', { value: runtime.agentRuntimeName });
     new CfnOutput(this, 'BackendApiUrl', { value: api.url });
     new CfnOutput(this, 'RuntimeInvokeUrl', { value: `${api.url}runtime/invoke` });
+    new CfnOutput(this, 'PlanningRunsUrl', { value: `${api.url}planning/runs` });
     new CfnOutput(this, 'GatewaysUrl', { value: gateway.gatewaysUrl });
     new CfnOutput(this, 'McpProxyUrl', { value: gateway.mcpProxyUrl });
     new CfnOutput(this, 'AgentCoreGatewayArn', { value: gateway.agentCoreGatewayArn });

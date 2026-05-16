@@ -12,8 +12,10 @@ This template assumes a future daily financial-data pipeline will populate portf
 - IAM-protected API Gateway endpoint for runtime invocation.
 - IAM-protected gateway discovery endpoint: `/gateways/iam`.
 - IAM-protected MCP-compatible proxy endpoint: `/mcp/proxy`.
+- IAM-protected model-run ledger endpoint: `/planning/runs`.
 - Lambda-backed dummy math-model control tools.
 - DynamoDB state table for short-lived synthetic model inputs, model runs, and override records.
+- EventBridge Monday seed rule that simulates the future data pipeline creating a model input and run.
 - CDK Pipeline for alpha, gamma, and prod stages.
 
 ## Gateway And Tools
@@ -63,6 +65,29 @@ The minimum model-control tools are:
 - `override_math_model(input_id, justification)`: record a governed human override decision.
 
 For template-only smoke tests, use `demo-model-input` as a safe synthetic `input_id`.
+
+## Weekly Planning Lifecycle
+
+The intended operating model is:
+
+1. Every Monday, the financial-data pipeline refreshes market data and creates a model input with a new `input_id`.
+2. After the input is saved, the backend triggers `run_math_model(input_id)` and stores a new run with a `run_id`.
+3. The UI reads `GET /planning/runs` to show the latest `input_id`, `run_id`, timestamp, portfolio, risk target, source, model id, and high-level result metadata.
+4. The user can ask the chatbot to inspect input, output, formulation, and overrides by passing `input_id` or `run_id`.
+5. If the user overrides an input, `override_math_model_input(input_id)` saves a new `model-input` record with a new `input_id` and `sourceInputId`.
+6. If the user records a governed override decision, `override_math_model(input_id, justification)` saves a `model-input-override` record.
+
+Until the real data pipeline exists, the template deploys an EventBridge rule named `WeeklyDataPipelineSeedRule`. It runs every Monday at 13:00 UTC and creates a synthetic input/run pair. The same behavior is also available by calling `POST /planning/runs` for smoke tests.
+
+The DynamoDB state table stores typed records:
+
+| Record type | Purpose |
+| --- | --- |
+| `model-input` | Optimizer input payload, including source, as-of date, snapshot, constraints, and market context. |
+| `portfolio-optimization` | Optimizer run/output payload, including `run_id`, `input_id`, `modelUsed`, solver status, and the 16-week plan. |
+| `model-input-override` | Governed human override decision with justification. |
+
+The template uses a single table for the golden path because these records are accessed together by `input_id` and `run_id`. A production system can split them into separate tables if ownership, retention, or throughput boundaries require it.
 
 ## What Should Be A Tool Vs A Skill
 
