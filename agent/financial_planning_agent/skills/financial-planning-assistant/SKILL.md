@@ -2,12 +2,12 @@
 name: financial-planning-assistant
 description: Standard operating procedure for portfolio optimization, weekly plan review, and financial planning explanation. Use when the user asks about portfolio planning, buy/sell plans, weekly review, liquidity constraints, or forecast deviations.
 allowed-tools:
-  - portfolio-planning___get_model_input
-  - portfolio-planning___get_model_output
-  - portfolio-planning___override_input
-  - portfolio-planning___get_model_formulation
+  - portfolio-planning___get_math_model_input
+  - portfolio-planning___get_math_model_output
+  - portfolio-planning___override_math_model_input
+  - portfolio-planning___get_math_model_formulation
   - portfolio-planning___run_math_model
-  - portfolio-planning___override
+  - portfolio-planning___override_math_model
 ---
 
 # Financial Planning Assistant
@@ -26,12 +26,12 @@ Use this skill to help with synthetic portfolio planning workflows.
 
 ## Tool Routing
 
-- Use `get_model_input` to inspect the exact input used for a model run.
-- Use `get_model_output` to inspect the raw optimizer output for a model run.
-- Use `get_model_formulation` to explain the optimization objective, variables, constraints, and outputs.
-- Use `override_input` to create an adjusted input payload before rerunning the model.
+- Use `get_math_model_input` to inspect the exact input used for a model run.
+- Use `get_math_model_output` to inspect the raw optimizer output for a model run.
+- Use `get_math_model_formulation` to explain the optimization objective, variables, constraints, and outputs.
+- Use `override_math_model_input` to create an adjusted input payload before rerunning the model.
 - Use `run_math_model` to execute the optimizer from an existing or overridden input payload.
-- Use `override` to record a governed manual override decision with a justification.
+- Use `override_math_model` to record a governed manual override decision with a justification.
 
 ## Optimization Flow
 
@@ -44,16 +44,16 @@ Use this skill to help with synthetic portfolio planning workflows.
 ## Model Override Flow
 
 1. Ask what input should be changed and why.
-2. Retrieve the current model input with `get_model_input`.
-3. Create a new input with `override_input`.
-4. Record the human justification with `override`.
+2. Retrieve the current model input with `get_math_model_input`.
+3. Create a new input with `override_math_model_input`.
+4. Record the human justification with `override_math_model`.
 5. Run the math model with `run_math_model`.
 6. Compare the new output with the previous output and explain the business impact.
 
 ## Weekly Review Flow
 
-1. Ask for the current simulation id, week number, actual cash, and actual portfolio value.
-2. Record the weekly review.
-3. Run what-if analysis if liquidity or adherence is off-plan.
-4. Generate the weekly report.
-5. Explain whether deviations are due to liquidity, missed trades, forecast drift, or market context.
+1. Ask for the current `run_id` and the previous `run_id` if comparison is needed.
+2. Retrieve model input and model output for the relevant runs.
+3. Compare portfolio value path, planned trades, cash usage, and any overridden assumptions.
+4. If the user wants a new scenario, create an overridden input, record the justification, and rerun the math model.
+5. Explain whether deviations are due to liquidity, changed assumptions, forecast drift, or override decisions.
