@@ -903,7 +903,12 @@ def get_math_model_input(args: dict[str, Any]) -> dict[str, Any]:
         "run_id": run.get("id") or run_id or None,
         "input_id": input_id,
         "model_input": payload,
-        "disclaimer": "Synthetic model input for workflow validation only.",
+        "disclaimer": (
+            "Market prices and OHLCV-derived return/risk features are from yfinance. "
+            "Holdings, cash, news context, and optimizer assumptions remain template/demo logic."
+            if payload.get("source") == "yfinance-market-data"
+            else "Synthetic model input for workflow validation only."
+        ),
     }
 
 
@@ -917,7 +922,7 @@ def get_math_model_output(args: dict[str, Any]) -> dict[str, Any]:
         "run_id": run.get("id"),
         "input_id": input_id or run.get("inputId"),
         "model_output": model_output,
-        "disclaimer": "Synthetic model output for workflow validation only; not financial advice.",
+        "disclaimer": "Template optimizer output for workflow validation only; not financial advice.",
     }
 
 

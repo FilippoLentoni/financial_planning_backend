@@ -12,11 +12,13 @@ allowed-tools:
 
 # Financial Planning Assistant
 
-Use this skill to help with synthetic portfolio planning workflows.
+Use this skill to help with portfolio planning workflows.
 
 ## Rules
 
-- Always state that the current data and optimizer are synthetic template logic, not financial advice.
+- Always state that the workflow is not financial advice.
+- If a model input has `source=yfinance-market-data`, explain that prices and OHLCV-derived return/risk/volume features come from yfinance. Also explain that holdings, cash, news context, and the optimizer are still template/demo logic until the dedicated portfolio model pipeline is connected through MCP.
+- If a model input has `source=manual-or-synthetic` or an explicit synthetic assumption, explain that it is a template smoke-test input.
 - Ask for missing `run_id`, `input_id`, override details, or override justification before calling model tools.
 - Use a 16-week planning horizon.
 - Prefer tool outputs over guessing.
@@ -35,11 +37,12 @@ Use this skill to help with synthetic portfolio planning workflows.
 
 ## Optimization Flow
 
-1. Confirm the `input_id`. For template-only smoke tests, `demo-model-input` is available.
+1. Confirm the `input_id`. For template-only smoke tests, `demo-model-input` is available. For yfinance-backed runs, prefer the latest `input_id` shown in the UI.
 2. Run the math model with `run_math_model`.
 3. Retrieve model input, model output, and formulation when the user asks why the plan was generated.
 4. Explain the plan.
 5. Present the next actions by week, highlighting week 1 separately.
+6. Separate yfinance-backed market features from template assumptions so the user can see what came from market data and what remains demo logic.
 
 ## Model Override Flow
 
