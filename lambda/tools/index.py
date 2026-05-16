@@ -1128,12 +1128,15 @@ def create_market_data_model_run(args: dict[str, Any] | None = None) -> dict[str
 def list_model_runs(args: dict[str, Any] | None = None) -> dict[str, Any]:
     args = args or {}
     limit = int(args.get("limit") or 10)
+    input_limit = int(args.get("inputLimit") or args.get("input_limit") or 50)
     runs = _scan_state("portfolio-optimization", limit)
+    model_inputs = _scan_state("model-input", input_limit)
     if not runs:
         seed = create_weekly_model_run({"source": "bootstrap-synthetic-seed"})
         runs = [_get_state(seed["run_id"]) or {}]
 
     items = []
+    runs_by_input: dict[str, list[dict[str, Any]]] = {}
     for run in runs:
         plan = run.get("plan") or run.get("modelOutput", {}).get("plan", {})
         inputs = run.get("inputs", {})
@@ -1161,11 +1164,38 @@ def list_model_runs(args: dict[str, Any] | None = None) -> dict[str, Any]:
                 ),
             }
         )
+        if input_id:
+            runs_by_input.setdefault(input_id, []).append(items[-1])
+
+    input_items = []
+    for model_input in model_inputs:
+        input_id = str(model_input.get("id") or "")
+        payload = model_input.get("payload", {}) if isinstance(model_input.get("payload"), dict) else {}
+        snapshot = payload.get("snapshot", {}) if isinstance(payload.get("snapshot"), dict) else {}
+        linked_runs = runs_by_input.get(input_id, [])
+        input_items.append(
+            {
+                "input_id": input_id,
+                "createdAt": model_input.get("createdAt"),
+                "createdAtIso": model_input.get("createdAtIso") or _iso_time(model_input.get("createdAt")),
+                "portfolioId": payload.get("portfolioId"),
+                "riskTarget": payload.get("riskTarget"),
+                "asOfDate": payload.get("asOfDate"),
+                "source": payload.get("source"),
+                "cashAvailable": payload.get("cashAvailable"),
+                "totalValue": snapshot.get("totalValue"),
+                "latest_run_id": linked_runs[0]["run_id"] if linked_runs else None,
+                "run_ids": [linked_run["run_id"] for linked_run in linked_runs if linked_run.get("run_id")],
+                "run_count": len(linked_runs),
+            }
+        )
 
     return {
         "items": items,
+        "inputs": input_items,
         "latest": items[0] if items else None,
         "count": len(items),
+        "inputCount": len(input_items),
         "storage": {
             "table": os.environ.get("STATE_TABLE_NAME") or "in-memory-local",
             "recordTypes": [
