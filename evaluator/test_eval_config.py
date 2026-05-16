@@ -69,6 +69,9 @@ def test_model_input_output_tools() -> None:
     model_input = module.get_math_model_input({"run_id": run_id})
     assert model_input["input_id"] == input_id
     assert model_input["model_input"]["planningHorizonWeeks"] == 16
+    direct_model_input = module.get_math_model_input({"input_id": input_id})
+    assert direct_model_input["input_id"] == input_id
+    assert direct_model_input["model_input"]["portfolioId"] == "demo-growth-income"
 
     model_output = module.get_math_model_output({"run_id": run_id})
     assert model_output["model_output"]["solverStatus"] == "OPTIMAL"

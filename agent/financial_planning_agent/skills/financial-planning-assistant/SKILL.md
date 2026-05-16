@@ -26,7 +26,7 @@ Use this skill to help with synthetic portfolio planning workflows.
 
 ## Tool Routing
 
-- Use `get_math_model_input` to inspect the exact input used for a model run.
+- Use `get_math_model_input` to inspect a model input. Prefer `input_id` when the user provides an input id from the UI; use `run_id` when the user asks for the input used by a specific run.
 - Use `get_math_model_output` to inspect the raw optimizer output for a model run.
 - Use `get_math_model_formulation` to explain the optimization objective, variables, constraints, and outputs.
 - Use `override_math_model_input` to create an adjusted input payload before rerunning the model.
@@ -44,7 +44,7 @@ Use this skill to help with synthetic portfolio planning workflows.
 ## Model Override Flow
 
 1. Ask what input should be changed and why.
-2. Retrieve the current model input with `get_math_model_input`.
+2. Retrieve the current model input with `get_math_model_input`. Pass `input_id` directly if the user copied an input id from the UI.
 3. Create a new input with `override_math_model_input`.
 4. Record the human justification with `override_math_model`.
 5. Run the math model with `run_math_model`.

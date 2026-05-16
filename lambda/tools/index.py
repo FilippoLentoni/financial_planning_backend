@@ -51,8 +51,10 @@ TOOL_CATALOG = [
         "description": "Return the model input payload used for a portfolio optimization run.",
         "inputSchema": {
             "type": "object",
-            "properties": {"run_id": {"type": "string"}},
-            "required": ["run_id"],
+            "properties": {
+                "run_id": {"type": "string"},
+                "input_id": {"type": "string"},
+            },
         },
     },
     {
@@ -692,8 +694,9 @@ def generate_weekly_report(args: dict[str, Any]) -> dict[str, Any]:
 
 def get_math_model_input(args: dict[str, Any]) -> dict[str, Any]:
     run_id = str(args.get("run_id") or args.get("simulation_id") or "").strip()
-    run = _require_model_run(run_id)
-    input_id = str(run.get("inputId") or run.get("input_id") or "").strip()
+    input_id_arg = str(args.get("input_id") or "").strip()
+    run = _require_model_run(run_id) if run_id else {}
+    input_id = input_id_arg or str(run.get("inputId") or run.get("input_id") or "").strip()
     if input_id:
         model_input = _require_model_input(input_id)
         payload = model_input.get("payload", {})
@@ -701,7 +704,7 @@ def get_math_model_input(args: dict[str, Any]) -> dict[str, Any]:
         payload = run.get("inputs", {})
         input_id = _stable_id("model-input", payload)
     return {
-        "run_id": run.get("id") or run_id,
+        "run_id": run.get("id") or run_id or None,
         "input_id": input_id,
         "model_input": payload,
         "disclaimer": "Synthetic model input for workflow validation only.",

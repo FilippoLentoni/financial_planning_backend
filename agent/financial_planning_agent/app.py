@@ -178,9 +178,14 @@ def generate_weekly_plan_report(
 
 
 @tool
-def get_math_model_input(run_id: str) -> dict[str, Any]:
-    """Return the model input payload used for a portfolio optimization run."""
-    return _invoke_tool_lambda("get_math_model_input", {"run_id": run_id})
+def get_math_model_input(run_id: str | None = None, input_id: str | None = None) -> dict[str, Any]:
+    """Return a model input payload by run_id or direct input_id."""
+    args: dict[str, Any] = {}
+    if run_id:
+        args["run_id"] = run_id
+    if input_id:
+        args["input_id"] = input_id
+    return _invoke_tool_lambda("get_math_model_input", args)
 
 
 @tool
