@@ -427,7 +427,7 @@ def _require_model_run(run_id: str) -> dict[str, Any]:
     if not run_id:
         raise ValueError("run_id is required")
     state = _get_state(run_id)
-    if state:
+    if state and state.get("type") == "portfolio-optimization":
         return state
     if run_id.startswith("portfolio-plan-"):
         return _require_simulation({"simulation_id": run_id})
@@ -695,6 +695,9 @@ def generate_weekly_report(args: dict[str, Any]) -> dict[str, Any]:
 def get_math_model_input(args: dict[str, Any]) -> dict[str, Any]:
     run_id = str(args.get("run_id") or args.get("simulation_id") or "").strip()
     input_id_arg = str(args.get("input_id") or "").strip()
+    if (run_id.startswith("model-input-") or run_id in {"demo-model-input", "default"}) and not input_id_arg:
+        input_id_arg = run_id
+        run_id = ""
     run = _require_model_run(run_id) if run_id else {}
     input_id = input_id_arg or str(run.get("inputId") or run.get("input_id") or "").strip()
     if input_id:
