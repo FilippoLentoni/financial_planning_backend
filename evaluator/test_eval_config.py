@@ -24,7 +24,14 @@ def test_agent_skills_are_discoverable() -> None:
     skills = module.loaded_skills(Path("agent/financial_planning_agent"))
     assert [skill["name"] for skill in skills] == ["financial-planning-assistant"]
     assert "portfolio optimization" in skills[0]["description"]
-    assert "portfolio-planning___run-portfolio-optimization" in skills[0]["allowedTools"]
+    assert skills[0]["allowedTools"] == [
+        "portfolio-planning___get_model_input",
+        "portfolio-planning___get_model_output",
+        "portfolio-planning___override_input",
+        "portfolio-planning___get_model_formulation",
+        "portfolio-planning___run_math_model",
+        "portfolio-planning___override",
+    ]
 
 
 def _load_module(path: str, name: str):
@@ -39,11 +46,49 @@ def test_public_gateway_tool_catalog() -> None:
     module = _load_module("lambda/tools/index.py", "backend_tools")
     gateways = module.list_gateways()["gateways"]
     tools = module.list_tools()["tools"]
+    tool_names = {tool["name"] for tool in tools}
     assert {gateway["id"] for gateway in gateways} == {"portfolio-planning"}
-    assert len(tools) >= 10
-    assert any(tool["name"] == "run-portfolio-optimization" for tool in tools)
-    assert any(tool["name"] == "generate-weekly-plan-report" for tool in tools)
-    assert module._normalize_tool_name("portfolio-planning___run-portfolio-optimization") == "run-portfolio-optimization"
+    assert tool_names == {
+        "get_model_input",
+        "get_model_output",
+        "override_input",
+        "get_model_formulation",
+        "run_math_model",
+        "override",
+    }
+    assert len(tools) == 6
+    assert module._normalize_tool_name("portfolio-planning___get_model_input") == "get_model_input"
+
+
+def test_model_input_output_tools() -> None:
+    module = _load_module("lambda/tools/index.py", "backend_tools_model")
+    rerun = module.run_math_model({"input_id": "demo-model-input"})
+    run_id = rerun["run_id"]
+    input_id = rerun["input_id"]
+
+    model_input = module.get_model_input({"run_id": run_id})
+    assert model_input["input_id"] == input_id
+    assert model_input["model_input"]["planningHorizonWeeks"] == 16
+
+    model_output = module.get_model_output({"run_id": run_id})
+    assert model_output["model_output"]["solverStatus"] == "OPTIMAL"
+    assert model_output["model_output"]["plan"]["weeks"]
+
+    formulation = module.get_model_formulation({"run_id": run_id})
+    assert "objective" in formulation["formulation"]
+
+    override = module.override_input(
+        {
+            "input_id": input_id,
+            "overrides": {"cashAvailable": 5000},
+            "justification": "Test liquidity scenario.",
+        }
+    )
+    assert override["source_input_id"] == input_id
+    overridden_rerun = module.run_math_model({"input_id": override["input_id"]})
+    assert overridden_rerun["status"] == "COMPLETED"
+    decision = module.record_override({"input_id": override["input_id"], "justification": "Synthetic test override."})
+    assert decision["status"] == "RECORDED"
 
 
 def test_mcp_proxy_local_gateway_contract() -> None:
@@ -51,9 +96,9 @@ def test_mcp_proxy_local_gateway_contract() -> None:
 
     def fake_invoke(tool, arguments=None):
         if tool == "listTools":
-            return {"tools": [{"name": "list-portfolios", "gateway": arguments["gateway"]}]}
-        if tool == "list-portfolios":
-            return {"portfolios": [{"portfolioId": "demo-growth-income"}]}
+            return {"tools": [{"name": "run_math_model", "gateway": arguments["gateway"]}]}
+        if tool == "run_math_model":
+            return {"run_id": "model-run-test", "status": "COMPLETED"}
         raise AssertionError(tool)
 
     module._invoke_tool = fake_invoke
@@ -63,7 +108,7 @@ def test_mcp_proxy_local_gateway_contract() -> None:
             "mcpBody": {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
         }
     )
-    assert list_response["result"]["tools"][0]["name"] == "list-portfolios"
+    assert list_response["result"]["tools"][0]["name"] == "run_math_model"
 
     call_response = module._handle_mcp(
         {
@@ -72,11 +117,11 @@ def test_mcp_proxy_local_gateway_contract() -> None:
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "list-portfolios", "arguments": {}},
+                "params": {"name": "run_math_model", "arguments": {"input_id": "demo-model-input"}},
             },
         }
     )
-    assert "demo-growth-income" in call_response["result"]["content"][0]["text"]
+    assert "model-run-test" in call_response["result"]["content"][0]["text"]
 
 
 if __name__ == "__main__":
@@ -84,5 +129,6 @@ if __name__ == "__main__":
     test_ping_module_imports()
     test_agent_skills_are_discoverable()
     test_public_gateway_tool_catalog()
+    test_model_input_output_tools()
     test_mcp_proxy_local_gateway_contract()
     print("OK")
