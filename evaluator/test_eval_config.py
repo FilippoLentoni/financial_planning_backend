@@ -79,6 +79,11 @@ def test_model_input_output_tools() -> None:
     model_output = module.get_math_model_output({"run_id": run_id})
     assert model_output["model_output"]["solverStatus"] == "OPTIMAL"
     assert model_output["model_output"]["plan"]["weeks"]
+    output_by_input = module.get_math_model_output({"input_id": input_id})
+    assert output_by_input["run_id"] == run_id
+    assert output_by_input["model_output"]["solverStatus"] == "OPTIMAL"
+    positional_output_by_input = module.get_math_model_output({"run_id": input_id})
+    assert positional_output_by_input["run_id"] == run_id
 
     formulation = module.get_math_model_formulation({"run_id": run_id})
     assert "objective" in formulation["formulation"]

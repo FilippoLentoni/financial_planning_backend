@@ -58,7 +58,7 @@ The portfolio optimizer is modeled as an input/output workflow so the agent can 
 The minimum model-control tools are:
 
 - `get_math_model_input(run_id | input_id)`: inspect the input used by a run, or retrieve a model input directly from the `input_id` shown in the UI.
-- `get_math_model_output(run_id)`: inspect the raw optimizer output.
+- `get_math_model_output(run_id | input_id)`: inspect raw optimizer output by run, or retrieve the latest output for the `input_id` shown in the UI.
 - `override_math_model_input(input_id)`: create a new input by applying synthetic overrides.
 - `get_math_model_formulation(run_id)`: inspect objective, variables, constraints, and outputs.
 - `run_math_model(input_id)`: run the dummy optimizer from an existing input.
