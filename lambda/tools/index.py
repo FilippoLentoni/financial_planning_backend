@@ -45,119 +45,6 @@ MEMORY_STATE: dict[str, dict[str, Any]] = {}
 
 TOOL_CATALOG = [
     {
-        "name": "list-portfolios",
-        "gateway": "portfolio-planning",
-        "description": "List synthetic portfolios available for planning.",
-        "inputSchema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "get-portfolio-snapshot",
-        "gateway": "portfolio-planning",
-        "description": "Return current synthetic holdings, cash, prices, and portfolio value.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"portfolio_id": {"type": "string"}},
-        },
-    },
-    {
-        "name": "get-market-context",
-        "gateway": "portfolio-planning",
-        "description": "Return synthetic daily market/news context for tracked stocks.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"symbols": {"type": "array", "items": {"type": "string"}}},
-        },
-    },
-    {
-        "name": "run-portfolio-optimization",
-        "gateway": "portfolio-planning",
-        "description": "Create a cost-safe 16-week synthetic buy/sell optimization plan.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "portfolio_id": {"type": "string"},
-                "risk_target": {"type": "string", "enum": ["conservative", "moderate", "growth"]},
-                "cash_available": {"type": "number"},
-                "max_trade_value_per_week": {"type": "number"},
-            },
-        },
-    },
-    {
-        "name": "get-simulation-status",
-        "gateway": "portfolio-planning",
-        "description": "Read synthetic optimization simulation status.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"simulation_id": {"type": "string"}},
-            "required": ["simulation_id"],
-        },
-    },
-    {
-        "name": "get-simulation-results",
-        "gateway": "portfolio-planning",
-        "description": "Retrieve the generated 16-week trade plan and expected portfolio path.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"simulation_id": {"type": "string"}},
-            "required": ["simulation_id"],
-        },
-    },
-    {
-        "name": "run-what-if-analysis",
-        "gateway": "portfolio-planning",
-        "description": "Analyze liquidity, adherence, or forecast-shock impact on a 16-week plan.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "simulation_id": {"type": "string"},
-                "cash_available": {"type": "number"},
-                "forecast_shock_pct": {"type": "number"},
-                "missed_trade_symbols": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["simulation_id"],
-        },
-    },
-    {
-        "name": "explain-trade-plan",
-        "gateway": "portfolio-planning",
-        "description": "Explain why the dummy optimizer suggests each buy/sell action.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"simulation_id": {"type": "string"}},
-            "required": ["simulation_id"],
-        },
-    },
-    {
-        "name": "record-weekly-review",
-        "gateway": "portfolio-planning",
-        "description": "Record a weekly review snapshot and adherence notes for the current plan.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "simulation_id": {"type": "string"},
-                "week": {"type": "integer"},
-                "actual_cash": {"type": "number"},
-                "actual_value": {"type": "number"},
-                "notes": {"type": "string"},
-            },
-            "required": ["simulation_id", "week"],
-        },
-    },
-    {
-        "name": "generate-weekly-plan-report",
-        "gateway": "portfolio-planning",
-        "description": "Generate a weekly report summarizing the next 16 weeks and deviations from the prior plan.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "simulation_id": {"type": "string"},
-                "previous_simulation_id": {"type": "string"},
-                "week": {"type": "integer"},
-            },
-            "required": ["simulation_id"],
-        },
-    },
-    {
         "name": "get_model_input",
         "gateway": "portfolio-planning",
         "description": "Return the model input payload used for a portfolio optimization run.",
@@ -471,7 +358,7 @@ def _require_model_input(input_id: str) -> dict[str, Any]:
     state = _get_state(input_id)
     if state and state.get("type") == "model-input":
         return state
-    if input_id == _default_model_input()["id"]:
+    if input_id in {"demo-model-input", "default"} or input_id == _default_model_input()["id"]:
         return _default_model_input()
     raise ValueError(f"model input not found: {input_id}")
 
@@ -615,7 +502,7 @@ def run_optimization(args: dict[str, Any]) -> dict[str, Any]:
             "expectedReturnPct16w": plan["expectedReturnPct16w"],
             "expectedValueAtWeek16": plan["expectedValueAtWeek16"],
         },
-        "nextStep": "Call get_model_input, get_model_output, explain-trade-plan, or generate-weekly-plan-report.",
+        "nextStep": "Call get_model_input, get_model_output, get_model_formulation, override_input, or run_math_model.",
     }
 
 
@@ -882,16 +769,6 @@ TOOL_HANDLERS = {
     "healthCheck": lambda args: health_check(),
     "listGateways": lambda args: list_gateways(),
     "listTools": lambda args: list_tools(args.get("gateway")),
-    "list-portfolios": lambda args: list_portfolios(),
-    "get-portfolio-snapshot": lambda args: _snapshot(_portfolio_id(args), float(args.get("cash") or DEFAULT_CASH)),
-    "get-market-context": get_market_context,
-    "run-portfolio-optimization": run_optimization,
-    "get-simulation-status": get_simulation_status,
-    "get-simulation-results": get_simulation_results,
-    "run-what-if-analysis": run_what_if,
-    "explain-trade-plan": explain_trade_plan,
-    "record-weekly-review": record_weekly_review,
-    "generate-weekly-plan-report": generate_weekly_report,
     "get_model_input": get_model_input,
     "get_model_output": get_model_output,
     "override_input": override_input,

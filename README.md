@@ -12,15 +12,15 @@ This template assumes a future daily financial-data pipeline will populate portf
 - IAM-protected API Gateway endpoint for runtime invocation.
 - IAM-protected gateway discovery endpoint: `/gateways/iam`.
 - IAM-protected MCP-compatible proxy endpoint: `/mcp/proxy`.
-- Lambda-backed dummy portfolio planning tools.
-- DynamoDB state table for short-lived synthetic simulations and weekly reviews.
+- Lambda-backed dummy math-model control tools.
+- DynamoDB state table for short-lived synthetic model inputs, model runs, and override records.
 - CDK Pipeline for alpha, gamma, and prod stages.
 
 ## Gateway And Tools
 
 | Gateway | Tools |
 | --- | --- |
-| `portfolio-planning` | `portfolio-planning___list-portfolios`, `portfolio-planning___get-portfolio-snapshot`, `portfolio-planning___get-market-context`, `portfolio-planning___run-portfolio-optimization`, `portfolio-planning___get-simulation-status`, `portfolio-planning___get-simulation-results`, `portfolio-planning___run-what-if-analysis`, `portfolio-planning___explain-trade-plan`, `portfolio-planning___record-weekly-review`, `portfolio-planning___generate-weekly-plan-report`, `portfolio-planning___get_model_input`, `portfolio-planning___get_model_output`, `portfolio-planning___override_input`, `portfolio-planning___get_model_formulation`, `portfolio-planning___run_math_model`, `portfolio-planning___override` |
+| `portfolio-planning` | `portfolio-planning___get_model_input`, `portfolio-planning___get_model_output`, `portfolio-planning___override_input`, `portfolio-planning___get_model_formulation`, `portfolio-planning___run_math_model`, `portfolio-planning___override` |
 
 The current dummy optimizer generates a 16-week buy/sell plan from synthetic holdings, prices, expected returns, risk scores, and liquidity constraints. It is intentionally lightweight and deterministic. It is not financial advice.
 
@@ -62,30 +62,30 @@ The minimum model-control tools are:
 - `run_math_model(input_id)`: run the dummy optimizer from an existing input.
 - `override(input_id, justification)`: record a governed human override decision.
 
+For template-only smoke tests, use `demo-model-input` as a safe synthetic `input_id`.
+
 ## What Should Be A Tool Vs A Skill
 
 Use **tools** for deterministic actions or data access:
 
-- Read portfolio snapshot from the future daily DynamoDB table.
-- Read stock/market context for a date.
-- Run the portfolio optimizer.
-- Retrieve simulation status/results.
-- Run what-if analysis for liquidity, forecast shocks, or missed trades.
-- Record weekly review observations.
-- Generate the structured weekly report payload.
+- Retrieve model input and output payloads.
+- Retrieve the math-model formulation.
+- Create overridden input payloads.
+- Run the portfolio optimizer from an input id.
+- Record governed override decisions.
 
 Use **agent skills / prompts** for reasoning and orchestration:
 
-- Ask clarifying questions about risk target, liquidity, and constraints.
+- Ask clarifying questions about `run_id`, `input_id`, liquidity, constraints, and override justification.
 - Decide which tools to call and in what order.
 - Explain why the optimizer recommends buy/sell actions.
-- Compare the current plan with the previous plan.
+- Compare the current model run with the previous run.
 - Summarize why the plan deviated: liquidity issue, forecast error, market-context change, or adherence problem.
-- Produce a human-readable weekly report from tool outputs.
+- Produce a human-readable weekly planning narrative from model inputs and outputs.
 
 ## Future MCP Model Pipeline
 
-Step 2 should move the portfolio math model into a dedicated package/pipeline and expose it through MCP. At that point, replace or extend the dummy `run-portfolio-optimization` Lambda handler with an MCP-backed optimizer target while keeping the same gateway/tool contract.
+Step 2 should move the portfolio math model into a dedicated package/pipeline and expose it through MCP. At that point, replace the dummy `run_math_model` Lambda handler with an MCP-backed optimizer target while keeping the same six-tool gateway contract.
 
 ## Manual Setup For A Real Project
 
