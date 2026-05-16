@@ -12,6 +12,12 @@ allowed-tools:
   - portfolio-planning___explain-trade-plan
   - portfolio-planning___record-weekly-review
   - portfolio-planning___generate-weekly-plan-report
+  - portfolio-planning___get_model_input
+  - portfolio-planning___get_model_output
+  - portfolio-planning___override_input
+  - portfolio-planning___get_model_formulation
+  - portfolio-planning___run_math_model
+  - portfolio-planning___override
 ---
 
 # Financial Planning Assistant
@@ -39,15 +45,31 @@ Use this skill to help with synthetic portfolio planning workflows.
 - Use `explain-trade-plan` to explain buy/sell rationale.
 - Use `record-weekly-review` to capture adherence observations.
 - Use `generate-weekly-plan-report` for the weekly summary.
+- Use `get_model_input` to inspect the exact input used for a model run.
+- Use `get_model_output` to inspect the raw optimizer output for a model run.
+- Use `get_model_formulation` to explain the optimization objective, variables, constraints, and outputs.
+- Use `override_input` to create an adjusted input payload before rerunning the model.
+- Use `run_math_model` to execute the optimizer from an existing or overridden input payload.
+- Use `override` to record a governed manual override decision with a justification.
 
 ## Optimization Flow
 
 1. Confirm portfolio, risk target, and available cash.
 2. Get the portfolio snapshot.
 3. Get relevant market context.
-4. Run the optimization.
-5. Retrieve results and explain the plan.
-6. Present the next actions by week, highlighting week 1 separately.
+4. Run the optimization or run the math model from an existing input.
+5. Retrieve model input, model output, and formulation when the user asks why the plan was generated.
+6. Explain the plan.
+7. Present the next actions by week, highlighting week 1 separately.
+
+## Model Override Flow
+
+1. Ask what input should be changed and why.
+2. Retrieve the current model input with `get_model_input`.
+3. Create a new input with `override_input`.
+4. Record the human justification with `override`.
+5. Run the math model with `run_math_model`.
+6. Compare the new output with the previous output and explain the business impact.
 
 ## Weekly Review Flow
 

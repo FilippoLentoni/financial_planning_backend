@@ -20,13 +20,47 @@ This template assumes a future daily financial-data pipeline will populate portf
 
 | Gateway | Tools |
 | --- | --- |
-| `portfolio-planning` | `portfolio-planning___list-portfolios`, `portfolio-planning___get-portfolio-snapshot`, `portfolio-planning___get-market-context`, `portfolio-planning___run-portfolio-optimization`, `portfolio-planning___get-simulation-status`, `portfolio-planning___get-simulation-results`, `portfolio-planning___run-what-if-analysis`, `portfolio-planning___explain-trade-plan`, `portfolio-planning___record-weekly-review`, `portfolio-planning___generate-weekly-plan-report` |
+| `portfolio-planning` | `portfolio-planning___list-portfolios`, `portfolio-planning___get-portfolio-snapshot`, `portfolio-planning___get-market-context`, `portfolio-planning___run-portfolio-optimization`, `portfolio-planning___get-simulation-status`, `portfolio-planning___get-simulation-results`, `portfolio-planning___run-what-if-analysis`, `portfolio-planning___explain-trade-plan`, `portfolio-planning___record-weekly-review`, `portfolio-planning___generate-weekly-plan-report`, `portfolio-planning___get_model_input`, `portfolio-planning___get_model_output`, `portfolio-planning___override_input`, `portfolio-planning___get_model_formulation`, `portfolio-planning___run_math_model`, `portfolio-planning___override` |
 
 The current dummy optimizer generates a 16-week buy/sell plan from synthetic holdings, prices, expected returns, risk scores, and liquidity constraints. It is intentionally lightweight and deterministic. It is not financial advice.
 
 The backend uses one AgentCore Gateway per bounded business domain. The `portfolio-planning` Lambda target exposes multiple tools through a single MCP endpoint. That is the preferred default for a cohesive tool set because Gateway is designed to compose multiple targets and tools into one MCP server. Split into additional gateways only when security boundaries, ownership, deployment cadence, or scaling needs are materially different.
 
 AgentCore prefixes Lambda-target tool names with the target name. For this target, tools are discovered as `portfolio-planning___<tool-name>`.
+
+## Model Input And Output Contract
+
+The portfolio optimizer is modeled as an input/output workflow so the agent can inspect, override, rerun, and explain the math model.
+
+**Input** means the complete payload sent to the optimizer. In this template it contains:
+
+- `input_id`: stable id for the model input payload.
+- `portfolioId`: portfolio being optimized.
+- `riskTarget`: `conservative`, `moderate`, or `growth`.
+- `cashAvailable`: liquidity available for the 16-week plan.
+- `maxTradeValuePerWeek`: weekly trading limit.
+- `planningHorizonWeeks`: fixed at `16`.
+- `snapshot`: synthetic holdings, cash, prices, and portfolio value.
+- `marketContext`: synthetic daily market/news context for tracked symbols.
+- `constraints`: synthetic optimizer constraints such as no short selling and weekly trade limits.
+
+**Output** means the optimizer result for a run. In this template it contains:
+
+- `run_id`: stable id for the model run.
+- `input_id`: input payload used by the run.
+- `solverStatus`: synthetic solver status, currently `OPTIMAL`.
+- `objectiveValue`: expected value at week 16 from the dummy objective.
+- `plan`: 16-week buy/sell plan, expected value path, trade rationale, and liquidity usage.
+- `formulationVersion`: version of the dummy formulation.
+
+The minimum model-control tools are:
+
+- `get_model_input(run_id)`: inspect the input used by a run.
+- `get_model_output(run_id)`: inspect the raw optimizer output.
+- `override_input(input_id)`: create a new input by applying synthetic overrides.
+- `get_model_formulation(run_id)`: inspect objective, variables, constraints, and outputs.
+- `run_math_model(input_id)`: run the dummy optimizer from an existing input.
+- `override(input_id, justification)`: record a governed human override decision.
 
 ## What Should Be A Tool Vs A Skill
 
