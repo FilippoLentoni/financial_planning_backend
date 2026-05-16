@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import statistics
 import time
 from decimal import Decimal
 from typing import Any
@@ -15,6 +17,11 @@ except ModuleNotFoundError:
 
     class ClientError(Exception):
         pass
+
+try:
+    import yfinance as yf
+except ModuleNotFoundError:
+    yf = None
 
 
 STOCKS = {
@@ -285,13 +292,128 @@ def _daily_context(symbol: str) -> str:
     return f"{symbol} has neutral synthetic context; planner treats it as a diversification holding."
 
 
+def _market_signal(expected_return: float, risk: float) -> str:
+    if expected_return >= 0.10 and risk <= 0.30:
+        return "positive"
+    if expected_return < 0.02:
+        return "defensive"
+    return "neutral"
+
+
+def _daily_context_from_feature(symbol: str, feature: dict[str, Any]) -> str:
+    source = feature.get("source", "market-data")
+    expected = float(feature.get("expectedReturn") or 0)
+    risk = float(feature.get("risk") or 0)
+    return (
+        f"{symbol} uses {source} OHLCV history with annualized expected return "
+        f"{expected:.2%} and annualized volatility {risk:.2%}. News sentiment is not connected yet."
+    )
+
+
+def _feature_from_history(symbol: str, rows: list[dict[str, Any]], sector: str | None = None) -> dict[str, Any]:
+    closes = [float(row["close"]) for row in rows if row.get("close") is not None and float(row["close"]) > 0]
+    if len(closes) < 2:
+        raise ValueError(f"not enough close prices for {symbol}")
+    returns = [(closes[index] / closes[index - 1]) - 1 for index in range(1, len(closes)) if closes[index - 1] > 0]
+    if not returns:
+        raise ValueError(f"not enough return observations for {symbol}")
+    volumes = [float(row.get("volume") or 0) for row in rows if row.get("volume") is not None]
+    expected_return = statistics.mean(returns) * 252
+    risk = statistics.stdev(returns) * math.sqrt(252) if len(returns) > 1 else 0.0
+    last_row = rows[-1]
+    return {
+        "symbol": symbol,
+        "source": "yfinance",
+        "asOfDate": str(last_row.get("date") or time.strftime("%Y-%m-%d", time.gmtime())),
+        "price": _round(closes[-1]),
+        "expectedReturn": round(float(expected_return), 6),
+        "risk": round(float(risk), 6),
+        "averageDailyVolume": _round(statistics.mean(volumes)) if volumes else 0,
+        "observations": len(closes),
+        "sector": sector or STOCKS.get(symbol, {}).get("sector", "Unknown"),
+        "signal": _market_signal(expected_return, risk),
+        "summary": (
+            f"{symbol} yfinance close=${_round(closes[-1]):,.2f}, "
+            f"annualized return={expected_return:.2%}, volatility={risk:.2%}."
+        ),
+    }
+
+
+def _fetch_yfinance_features(symbols: list[str], period: str = "1y") -> list[dict[str, Any]]:
+    if yf is None:
+        raise ValueError("yfinance is not installed in this Lambda package")
+    features = []
+    for symbol in symbols:
+        ticker = yf.Ticker(symbol)
+        history = ticker.history(period=period, interval="1d", auto_adjust=False)
+        if history is None or history.empty:
+            raise ValueError(f"yfinance returned no history for {symbol}")
+        rows = []
+        for index, row in history.tail(260).iterrows():
+            close = row.get("Close")
+            if close is None or str(close) == "nan":
+                continue
+            rows.append(
+                {
+                    "date": getattr(index, "strftime", lambda _fmt: str(index))("%Y-%m-%d"),
+                    "open": float(row.get("Open")) if row.get("Open") == row.get("Open") else None,
+                    "high": float(row.get("High")) if row.get("High") == row.get("High") else None,
+                    "low": float(row.get("Low")) if row.get("Low") == row.get("Low") else None,
+                    "close": float(close),
+                    "volume": float(row.get("Volume")) if row.get("Volume") == row.get("Volume") else None,
+                }
+            )
+        features.append(_feature_from_history(symbol, rows, STOCKS.get(symbol, {}).get("sector")))
+    return features
+
+
+def _snapshot_from_market_features(
+    portfolio_id: str,
+    cash: float,
+    market_features: list[dict[str, Any]],
+) -> dict[str, Any]:
+    by_symbol = {str(item["symbol"]).upper(): item for item in market_features}
+    positions = []
+    for symbol, quantity in BASE_HOLDINGS.items():
+        feature = by_symbol.get(symbol)
+        if not feature:
+            continue
+        price = float(feature["price"])
+        value = quantity * price
+        positions.append(
+            {
+                "symbol": symbol,
+                "quantity": quantity,
+                "price": _round(price),
+                "marketValue": _round(value),
+                "sector": feature.get("sector") or STOCKS.get(symbol, {}).get("sector", "Unknown"),
+                "expectedReturn": float(feature.get("expectedReturn") or 0),
+                "risk": float(feature.get("risk") or 0),
+                "dailyContext": _daily_context_from_feature(symbol, feature),
+                "averageDailyVolume": feature.get("averageDailyVolume"),
+                "dataSource": "yfinance",
+            }
+        )
+    invested = sum(item["marketValue"] for item in positions)
+    return {
+        "portfolioId": portfolio_id,
+        "asOf": max((item.get("asOfDate") or "" for item in market_features), default="unknown"),
+        "cash": _round(cash),
+        "positions": positions,
+        "totalValue": _round(invested + cash),
+        "assumption": "Market prices and risk/return estimates are derived from yfinance OHLCV history. News sentiment is not connected yet.",
+    }
+
+
 def _target_weight(stock: dict[str, Any], risk_target: str) -> float:
-    score = stock["expected_return"] / max(stock["risk"], 0.01)
+    expected_return = float(stock.get("expected_return", stock.get("expectedReturn", 0)))
+    risk = float(stock.get("risk", 0.01))
+    score = expected_return / max(risk, 0.01)
     if risk_target == "conservative":
-        score *= 0.7 if stock["risk"] > 0.18 else 1.3
+        score *= 0.7 if risk > 0.18 else 1.3
     elif risk_target == "growth":
-        score *= 1.35 if stock["expected_return"] >= 0.10 else 0.75
-    return score
+        score *= 1.35 if expected_return >= 0.10 else 0.75
+    return max(score, 0.01)
 
 
 def _build_trade_plan(
@@ -299,10 +421,21 @@ def _build_trade_plan(
     risk_target: str,
     cash_available: float,
     max_trade_value_per_week: float,
+    model_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    snapshot = _snapshot(portfolio_id, cash_available)
+    snapshot = model_payload.get("snapshot") if model_payload and isinstance(model_payload.get("snapshot"), dict) else _snapshot(portfolio_id, cash_available)
     total_value = snapshot["totalValue"]
-    scores = {symbol: _target_weight(stock, risk_target) for symbol, stock in STOCKS.items()}
+    stock_inputs = {
+        pos["symbol"]: {
+            "expected_return": pos.get("expectedReturn", STOCKS.get(pos["symbol"], {}).get("expected_return", 0)),
+            "risk": pos.get("risk", STOCKS.get(pos["symbol"], {}).get("risk", 0.01)),
+            "price": pos.get("price", STOCKS.get(pos["symbol"], {}).get("price", 0)),
+            "signal": _market_signal(float(pos.get("expectedReturn", 0)), float(pos.get("risk", 0))),
+            "dailyContext": pos.get("dailyContext"),
+        }
+        for pos in snapshot.get("positions", [])
+    }
+    scores = {symbol: _target_weight(stock, risk_target) for symbol, stock in stock_inputs.items()}
     score_total = sum(scores.values())
     current_values = {pos["symbol"]: pos["marketValue"] for pos in snapshot["positions"]}
     trades = []
@@ -314,14 +447,15 @@ def _build_trade_plan(
             continue
         weekly_value = max(-max_trade_value_per_week, min(max_trade_value_per_week, delta / 4))
         action = "BUY" if weekly_value > 0 else "SELL"
-        quantity = max(1, round(abs(weekly_value) / STOCKS[symbol]["price"]))
+        price = float(stock_inputs[symbol].get("price") or 1)
+        quantity = max(1, round(abs(weekly_value) / price))
         trades.append(
             {
                 "symbol": symbol,
                 "action": action,
                 "weeklyQuantity": quantity,
-                "weeklyTradeValue": _round(quantity * STOCKS[symbol]["price"]),
-                "reason": _trade_reason(symbol, action, risk_target),
+                "weeklyTradeValue": _round(quantity * price),
+                "reason": _trade_reason(symbol, action, risk_target, stock_inputs.get(symbol)),
             }
         )
 
@@ -331,7 +465,7 @@ def _build_trade_plan(
                 "symbol": "MSFT",
                 "action": "BUY",
                 "weeklyQuantity": 1,
-                "weeklyTradeValue": STOCKS["MSFT"]["price"],
+                "weeklyTradeValue": stock_inputs.get("MSFT", STOCKS["MSFT"]).get("price", STOCKS["MSFT"]["price"]),
                 "reason": "Maintains the demo plan with a small high-quality technology allocation.",
             }
         )
@@ -373,11 +507,33 @@ def _model_input_from_args(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("risk_target must be conservative, moderate, or growth")
     cash_available = float(args.get("cash_available") or DEFAULT_CASH)
     max_trade_value = float(args.get("max_trade_value_per_week") or 7_500.0)
-    snapshot = _snapshot(portfolio_id, cash_available)
-    market_context = get_market_context({"symbols": list(STOCKS)})["items"]
+    market_features = args.get("market_features") if isinstance(args.get("market_features"), list) else []
+    snapshot = (
+        _snapshot_from_market_features(portfolio_id, cash_available, market_features)
+        if market_features
+        else _snapshot(portfolio_id, cash_available)
+    )
+    market_context = (
+        [
+            {
+                "symbol": item["symbol"],
+                "sector": item.get("sector"),
+                "signal": item.get("signal"),
+                "expectedReturn": item.get("expectedReturn"),
+                "risk": item.get("risk"),
+                "summary": item.get("summary"),
+                "averageDailyVolume": item.get("averageDailyVolume"),
+                "source": "yfinance",
+            }
+            for item in market_features
+        ]
+        if market_features
+        else get_market_context({"symbols": list(STOCKS)})["items"]
+    )
+    source = str(args.get("source") or ("yfinance-market-data" if market_features else "manual-or-synthetic"))
     payload = {
         "asOfDate": str(args.get("as_of_date") or time.strftime("%Y-%m-%d", time.gmtime())),
-        "source": str(args.get("source") or "manual-or-synthetic"),
+        "source": source,
         "portfolioId": portfolio_id,
         "riskTarget": risk_target,
         "cashAvailable": _round(cash_available),
@@ -391,7 +547,11 @@ def _model_input_from_args(args: dict[str, Any]) -> dict[str, Any]:
             "noShortSelling": True,
             "rebalanceCadence": "weekly",
         },
-        "assumption": "Synthetic model input for workflow validation only.",
+        "assumption": (
+            "Market features are derived from yfinance OHLCV data. News and portfolio-account data are still template placeholders."
+            if market_features
+            else "Synthetic model input for workflow validation only."
+        ),
     }
     input_id = _stable_id("model-input", payload)
     return {"id": input_id, "type": "model-input", "createdAt": int(time.time()), "payload": payload}
@@ -493,12 +653,14 @@ def _model_formulation(risk_target: str = DEFAULT_RISK_TARGET) -> dict[str, Any]
     }
 
 
-def _trade_reason(symbol: str, action: str, risk_target: str) -> str:
-    stock = STOCKS[symbol]
+def _trade_reason(symbol: str, action: str, risk_target: str, stock_input: dict[str, Any] | None = None) -> str:
+    stock = stock_input or STOCKS[symbol]
+    expected_return = float(stock.get("expected_return", stock.get("expectedReturn", 0)))
+    signal = str(stock.get("signal") or "market-data")
     if action == "BUY":
         return (
             f"{symbol} scores well for {risk_target} planning because expected return is "
-            f"{stock['expected_return']:.0%} with {stock['signal']} synthetic context."
+            f"{expected_return:.0%} with {signal} context."
         )
     return (
         f"{symbol} is reduced to free liquidity or rebalance sector exposure under the "
@@ -530,7 +692,7 @@ def list_gateways() -> dict[str, Any]:
             {
                 "id": "portfolio-planning",
                 "name": "Portfolio Planning",
-                "description": "Synthetic math-model input, output, formulation, run, and override tools.",
+                "description": "Math-model input, output, formulation, run, and override tools backed by stored portfolio planning data.",
                 "mcpUrl": "local://portfolio-planning",
                 "authType": "iam-proxy",
                 "sigv4Region": os.environ.get("AWS_REGION", "us-west-2"),
@@ -808,7 +970,7 @@ def run_math_model(args: dict[str, Any]) -> dict[str, Any]:
     risk_target = str(payload.get("riskTarget") or DEFAULT_RISK_TARGET)
     cash_available = float(payload.get("cashAvailable") or DEFAULT_CASH)
     max_trade_value = float(payload.get("maxTradeValuePerWeek") or 7_500.0)
-    plan = _build_trade_plan(portfolio_id, risk_target, cash_available, max_trade_value)
+    plan = _build_trade_plan(portfolio_id, risk_target, cash_available, max_trade_value, payload)
     model_output = {
         "plan": plan,
         "solverStatus": "OPTIMAL",
@@ -888,6 +1050,76 @@ def create_weekly_model_run(args: dict[str, Any] | None = None) -> dict[str, Any
     }
 
 
+def fetch_market_data(args: dict[str, Any] | None = None) -> dict[str, Any]:
+    args = args or {}
+    symbols = _symbols(args.get("symbols") or os.environ.get("TICKER_UNIVERSE"))
+    period = str(args.get("period") or "1y")
+    created_at = int(time.time())
+    features = _fetch_yfinance_features(symbols, period)
+    as_of = max((item.get("asOfDate") or "" for item in features), default=time.strftime("%Y-%m-%d", time.gmtime()))
+    batch_id = _stable_id("market-data-batch", {"provider": "yfinance", "as_of": as_of, "symbols": symbols})
+    for feature in features:
+        _put_state(
+            {
+                "id": f"market-data-{feature['symbol']}-{feature['asOfDate']}",
+                "type": "market-data",
+                "provider": "yfinance",
+                "symbol": feature["symbol"],
+                "createdAt": created_at,
+                "createdAtIso": _iso_time(created_at),
+                "payload": feature,
+            }
+        )
+    batch = {
+        "id": batch_id,
+        "type": "market-data-batch",
+        "provider": "yfinance",
+        "createdAt": created_at,
+        "createdAtIso": _iso_time(created_at),
+        "asOfDate": as_of,
+        "symbols": symbols,
+        "items": features,
+    }
+    _put_state(batch)
+    return {
+        "batch_id": batch_id,
+        "provider": "yfinance",
+        "asOfDate": as_of,
+        "symbols": symbols,
+        "items": features,
+        "createdAt": created_at,
+        "createdAtIso": _iso_time(created_at),
+    }
+
+
+def create_market_data_model_run(args: dict[str, Any] | None = None) -> dict[str, Any]:
+    args = args or {}
+    market_data = fetch_market_data(args)
+    created_at = int(time.time())
+    model_input = _persist_model_input(
+        {
+            "portfolio_id": args.get("portfolio_id") or "demo-growth-income",
+            "risk_target": args.get("risk_target") or DEFAULT_RISK_TARGET,
+            "cash_available": args.get("cash_available") or DEFAULT_CASH,
+            "max_trade_value_per_week": args.get("max_trade_value_per_week") or 7_500.0,
+            "as_of_date": market_data["asOfDate"],
+            "source": "yfinance-market-data",
+            "market_features": market_data["items"],
+        }
+    )
+    run = run_math_model({"input_id": model_input["id"]})
+    return {
+        "status": "COMPLETED",
+        "provider": "yfinance",
+        "market_data_batch_id": market_data["batch_id"],
+        "input_id": model_input["id"],
+        "run_id": run["run_id"],
+        "createdAt": created_at,
+        "createdAtIso": _iso_time(created_at),
+        "source": "yfinance-market-data",
+    }
+
+
 def list_model_runs(args: dict[str, Any] | None = None) -> dict[str, Any]:
     args = args or {}
     limit = int(args.get("limit") or 10)
@@ -931,7 +1163,13 @@ def list_model_runs(args: dict[str, Any] | None = None) -> dict[str, Any]:
         "count": len(items),
         "storage": {
             "table": os.environ.get("STATE_TABLE_NAME") or "in-memory-local",
-            "recordTypes": ["model-input", "portfolio-optimization", "model-input-override"],
+            "recordTypes": [
+                "market-data",
+                "market-data-batch",
+                "model-input",
+                "portfolio-optimization",
+                "model-input-override",
+            ],
         },
     }
 
@@ -949,6 +1187,8 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
         body = json.loads(raw_body) if isinstance(raw_body, str) and raw_body.strip() else {}
         if body.get("input_id"):
             return _response(200, run_math_model({"input_id": body["input_id"]}))
+        if body.get("source") == "yfinance-market-data":
+            return _response(200, create_market_data_model_run(body))
         return _response(200, create_weekly_model_run(body))
     return _response(404, {"error": f"unknown route: {method} {path}"})
 
@@ -965,6 +1205,8 @@ TOOL_HANDLERS = {
     "override_math_model": override_math_model,
     "listModelRuns": lambda args: list_model_runs(args),
     "createWeeklyModelRun": lambda args: create_weekly_model_run(args),
+    "fetchMarketData": lambda args: fetch_market_data(args),
+    "createMarketDataModelRun": lambda args: create_market_data_model_run(args),
 }
 
 
@@ -995,6 +1237,9 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
         if event.get("source") == "financial-planning.weekly-data-pipeline":
             return _json_safe(create_weekly_model_run(event.get("detail") or event))
+
+        if event.get("source") == "financial-planning.market-data-pipeline":
+            return _json_safe(create_market_data_model_run(event.get("detail") or event))
 
         if event.get("httpMethod") or event.get("rawPath") or event.get("requestContext", {}).get("http"):
             return _handle_http(event)

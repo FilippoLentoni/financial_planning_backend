@@ -114,11 +114,8 @@ def test_model_run_ledger_and_http_contract() -> None:
     assert latest["run_id"] == created["run_id"]
     assert latest["modelUsed"]["modelId"]
     assert latest["createdAtIso"].endswith("Z")
-    assert runs["storage"]["recordTypes"] == [
-        "model-input",
-        "portfolio-optimization",
-        "model-input-override",
-    ]
+    assert "market-data" in runs["storage"]["recordTypes"]
+    assert "portfolio-optimization" in runs["storage"]["recordTypes"]
 
     response = module.handler(
         {
@@ -130,6 +127,47 @@ def test_model_run_ledger_and_http_contract() -> None:
     )
     assert response["statusCode"] == 200
     assert "portfolio-optimization" in response["body"]
+
+
+def test_market_data_pipeline_contract() -> None:
+    module = _load_module("lambda/tools/index.py", "backend_tools_market")
+
+    def fake_fetch(symbols, period="1y"):
+        return [
+            {
+                "symbol": symbol,
+                "source": "yfinance",
+                "asOfDate": "2026-05-15",
+                "price": 100 + index,
+                "expectedReturn": 0.05 + index / 100,
+                "risk": 0.12 + index / 100,
+                "averageDailyVolume": 1_000_000 + index,
+                "observations": 252,
+                "sector": "Technology",
+                "signal": "positive",
+                "summary": f"{symbol} fake yfinance feature.",
+            }
+            for index, symbol in enumerate(symbols)
+        ]
+
+    module._fetch_yfinance_features = fake_fetch
+    result = module.create_market_data_model_run(
+        {
+            "symbols": ["AAPL", "MSFT"],
+            "portfolio_id": "demo-growth-income",
+            "risk_target": "moderate",
+        }
+    )
+    assert result["provider"] == "yfinance"
+    assert result["input_id"].startswith("model-input-")
+    model_input = module.get_math_model_input({"input_id": result["input_id"]})["model_input"]
+    assert model_input["source"] == "yfinance-market-data"
+    assert model_input["snapshot"]["positions"][0]["dataSource"] == "yfinance"
+    assert model_input["marketContext"][0]["source"] == "yfinance"
+
+    model_output = module.get_math_model_output({"input_id": result["input_id"]})
+    assert model_output["run_id"] == result["run_id"]
+    assert model_output["model_output"]["solverStatus"] == "OPTIMAL"
 
 
 def test_mcp_proxy_local_gateway_contract() -> None:
@@ -172,5 +210,6 @@ if __name__ == "__main__":
     test_public_gateway_tool_catalog()
     test_model_input_output_tools()
     test_model_run_ledger_and_http_contract()
+    test_market_data_pipeline_contract()
     test_mcp_proxy_local_gateway_contract()
     print("OK")
