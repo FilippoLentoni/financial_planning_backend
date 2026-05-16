@@ -1,4 +1,10 @@
-import { Stack, StackProps, aws_codepipeline as codepipeline, pipelines } from 'aws-cdk-lib';
+import {
+  Stack,
+  StackProps,
+  aws_codebuild as codebuild,
+  aws_codepipeline as codepipeline,
+  pipelines,
+} from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { FinancialPlanningBackendApplicationStage } from './application-stage';
 import { STAGES } from './config';
@@ -19,6 +25,13 @@ export class DeploymentPipelineStack extends Stack {
       crossAccountKeys: true,
       dockerEnabledForSynth: true,
       dockerEnabledForSelfMutation: true,
+      assetPublishingCodeBuildDefaults: {
+        buildEnvironment: {
+          buildImage: codebuild.LinuxArmBuildImage.AMAZON_LINUX_2_STANDARD_3_0,
+          computeType: codebuild.ComputeType.SMALL,
+          privileged: true,
+        },
+      },
       synth: new pipelines.ShellStep('Synth', {
         input: pipelines.CodePipelineSource.connection(sourceRepo, sourceBranch, {
           connectionArn: sourceConnectionArn,
