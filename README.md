@@ -20,7 +20,7 @@ This template assumes a future daily financial-data pipeline will populate portf
 
 | Gateway | Tools |
 | --- | --- |
-| `portfolio-planning` | `portfolio-planning___get_model_input`, `portfolio-planning___get_model_output`, `portfolio-planning___override_input`, `portfolio-planning___get_model_formulation`, `portfolio-planning___run_math_model`, `portfolio-planning___override` |
+| `portfolio-planning` | `portfolio-planning___get_math_model_input`, `portfolio-planning___get_math_model_output`, `portfolio-planning___override_math_model_input`, `portfolio-planning___get_math_model_formulation`, `portfolio-planning___run_math_model`, `portfolio-planning___override_math_model` |
 
 The current dummy optimizer generates a 16-week buy/sell plan from synthetic holdings, prices, expected returns, risk scores, and liquidity constraints. It is intentionally lightweight and deterministic. It is not financial advice.
 
@@ -30,7 +30,7 @@ AgentCore prefixes Lambda-target tool names with the target name. For this targe
 
 ## Model Input And Output Contract
 
-The portfolio optimizer is modeled as an input/output workflow so the agent can inspect, override, rerun, and explain the math model.
+The portfolio optimizer is modeled as an input/output workflow so the agent can inspect, override_math_model, rerun, and explain the math model.
 
 **Input** means the complete payload sent to the optimizer. In this template it contains:
 
@@ -55,12 +55,12 @@ The portfolio optimizer is modeled as an input/output workflow so the agent can 
 
 The minimum model-control tools are:
 
-- `get_model_input(run_id)`: inspect the input used by a run.
-- `get_model_output(run_id)`: inspect the raw optimizer output.
-- `override_input(input_id)`: create a new input by applying synthetic overrides.
-- `get_model_formulation(run_id)`: inspect objective, variables, constraints, and outputs.
+- `get_math_model_input(run_id)`: inspect the input used by a run.
+- `get_math_model_output(run_id)`: inspect the raw optimizer output.
+- `override_math_model_input(input_id)`: create a new input by applying synthetic overrides.
+- `get_math_model_formulation(run_id)`: inspect objective, variables, constraints, and outputs.
 - `run_math_model(input_id)`: run the dummy optimizer from an existing input.
-- `override(input_id, justification)`: record a governed human override decision.
+- `override_math_model(input_id, justification)`: record a governed human override decision.
 
 For template-only smoke tests, use `demo-model-input` as a safe synthetic `input_id`.
 
