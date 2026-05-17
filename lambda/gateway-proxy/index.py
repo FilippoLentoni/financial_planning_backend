@@ -10,7 +10,7 @@ except ModuleNotFoundError:
     boto3 = None
 
 
-lambda_client = boto3.client("lambda") if boto3 is not None else None
+lambda_client = None
 
 
 def _cors_headers() -> dict[str, str]:
@@ -34,6 +34,11 @@ def _tool_lambda_name() -> str:
 
 
 def _invoke_tool(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    global lambda_client
+    if boto3 is None:
+        raise RuntimeError("boto3 is not available")
+    if lambda_client is None:
+        lambda_client = boto3.client("lambda", region_name=os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION"))
     response = lambda_client.invoke(
         FunctionName=_tool_lambda_name(),
         Payload=json.dumps({"tool": tool, "arguments": arguments or {}}).encode("utf-8"),
