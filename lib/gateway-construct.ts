@@ -111,14 +111,22 @@ export function createGatewayResources(
 
 const PORTFOLIO_PLANNING_TOOL_SCHEMA: ToolDefinition[] = [
   {
+    name: 'hello_world',
+    description: 'Return a simple greeting used to smoke-test backend tool wiring.',
+    inputSchema: {
+      type: SchemaDefinitionType.OBJECT,
+      properties: {},
+    },
+  },
+  {
     name: 'get_math_model_input',
     description: 'Return the model input payload used for a portfolio optimization run.',
     inputSchema: {
       type: SchemaDefinitionType.OBJECT,
       properties: {
         run_id: { type: SchemaDefinitionType.STRING },
+        input_id: { type: SchemaDefinitionType.STRING },
       },
-      required: ['run_id'],
     },
   },
   {
@@ -128,8 +136,8 @@ const PORTFOLIO_PLANNING_TOOL_SCHEMA: ToolDefinition[] = [
       type: SchemaDefinitionType.OBJECT,
       properties: {
         run_id: { type: SchemaDefinitionType.STRING },
+        input_id: { type: SchemaDefinitionType.STRING },
       },
-      required: ['run_id'],
     },
   },
   {
@@ -157,14 +165,25 @@ const PORTFOLIO_PLANNING_TOOL_SCHEMA: ToolDefinition[] = [
     },
   },
   {
-    name: 'run_math_model',
-    description: 'Run the synthetic portfolio optimization math model for a stored input payload.',
+    name: 'trigger_math_model',
+    description: 'Trigger the portfolio optimization math model for a stored input payload and return the run id.',
     inputSchema: {
       type: SchemaDefinitionType.OBJECT,
       properties: {
         input_id: { type: SchemaDefinitionType.STRING },
       },
       required: ['input_id'],
+    },
+  },
+  {
+    name: 'get_math_model_status',
+    description: 'Return completion status and metadata for a portfolio optimization model run.',
+    inputSchema: {
+      type: SchemaDefinitionType.OBJECT,
+      properties: {
+        run_id: { type: SchemaDefinitionType.STRING },
+      },
+      required: ['run_id'],
     },
   },
   {

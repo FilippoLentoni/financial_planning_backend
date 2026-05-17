@@ -22,7 +22,7 @@ This template includes a first-pass market-data pipeline that uses `yfinance` to
 
 | Gateway | Tools |
 | --- | --- |
-| `portfolio-planning` | `portfolio-planning___get_math_model_input`, `portfolio-planning___get_math_model_output`, `portfolio-planning___override_math_model_input`, `portfolio-planning___get_math_model_formulation`, `portfolio-planning___trigger_math_model`, `portfolio-planning___get_math_model_status`, `portfolio-planning___override_math_model` |
+| `portfolio-planning` | `portfolio-planning___hello_world`, `portfolio-planning___get_math_model_input`, `portfolio-planning___get_math_model_output`, `portfolio-planning___override_math_model_input`, `portfolio-planning___get_math_model_formulation`, `portfolio-planning___trigger_math_model`, `portfolio-planning___get_math_model_status`, `portfolio-planning___override_math_model` |
 
 The current dummy optimizer generates a 16-week buy/sell plan from holdings, prices, expected returns, risk scores, and liquidity constraints. When the yfinance pipeline has run, prices/risk/return features come from yfinance OHLCV history. Holdings, cash, constraints, and the optimizer itself are still template logic. It is not financial advice.
 

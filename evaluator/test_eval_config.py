@@ -25,6 +25,7 @@ def test_agent_skills_are_discoverable() -> None:
     assert [skill["name"] for skill in skills] == ["financial-planning-assistant"]
     assert "portfolio optimization" in skills[0]["description"]
     assert skills[0]["allowedTools"] == [
+        "portfolio-planning___hello_world",
         "portfolio-planning___get_math_model_input",
         "portfolio-planning___get_math_model_output",
         "portfolio-planning___override_math_model_input",
@@ -50,6 +51,7 @@ def test_public_gateway_tool_catalog() -> None:
     tool_names = {tool["name"] for tool in tools}
     assert {gateway["id"] for gateway in gateways} == {"portfolio-planning"}
     assert tool_names == {
+        "hello_world",
         "get_math_model_input",
         "get_math_model_output",
         "override_math_model_input",
@@ -58,8 +60,10 @@ def test_public_gateway_tool_catalog() -> None:
         "get_math_model_status",
         "override_math_model",
     }
-    assert len(tools) == 7
+    assert len(tools) == 8
+    assert module.hello_world({}) == {"message": "hi filippo you are the best"}
     assert module._normalize_tool_name("portfolio-planning___get_math_model_input") == "get_math_model_input"
+    assert module._normalize_tool_name("portfolio-planning___hello_world") == "hello_world"
 
 
 def test_model_input_output_tools() -> None:

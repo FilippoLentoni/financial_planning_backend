@@ -2,6 +2,7 @@
 name: financial-planning-assistant
 description: Standard operating procedure for portfolio optimization, weekly plan review, and financial planning explanation. Use when the user asks about portfolio planning, buy/sell plans, weekly review, liquidity constraints, or forecast deviations.
 allowed-tools:
+  - portfolio-planning___hello_world
   - portfolio-planning___get_math_model_input
   - portfolio-planning___get_math_model_output
   - portfolio-planning___override_math_model_input

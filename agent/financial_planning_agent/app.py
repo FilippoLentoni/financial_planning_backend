@@ -66,6 +66,12 @@ def discover_gateway_tools(gateway: str = "portfolio-planning") -> dict[str, Any
 
 
 @tool
+def hello_world() -> dict[str, Any]:
+    """Return a simple greeting used to smoke-test backend tool wiring."""
+    return _invoke_tool_lambda("hello_world", {})
+
+
+@tool
 def list_portfolios() -> dict[str, Any]:
     """List synthetic portfolios available for planning."""
     return _invoke_tool_lambda("list-portfolios", {})
@@ -209,9 +215,15 @@ def get_math_model_formulation(run_id: str) -> dict[str, Any]:
 
 
 @tool
-def run_math_model(input_id: str) -> dict[str, Any]:
-    """Run the synthetic portfolio optimization math model for a stored input payload."""
-    return _invoke_tool_lambda("run_math_model", {"input_id": input_id})
+def trigger_math_model(input_id: str) -> dict[str, Any]:
+    """Trigger the synthetic portfolio optimization math model for a stored input payload."""
+    return _invoke_tool_lambda("trigger_math_model", {"input_id": input_id})
+
+
+@tool
+def get_math_model_status(run_id: str) -> dict[str, Any]:
+    """Return completion status and metadata for a portfolio optimization model run."""
+    return _invoke_tool_lambda("get_math_model_status", {"run_id": run_id})
 
 
 @tool
@@ -267,21 +279,26 @@ def _agent_instance() -> Agent:
                 calculator,
                 health_check,
                 list_agent_skills,
+                hello_world,
                 get_math_model_input,
                 get_math_model_output,
                 override_math_model_input,
                 get_math_model_formulation,
-                run_math_model,
+                trigger_math_model,
+                get_math_model_status,
                 override_math_model,
             ],
             system_prompt=(
                 "You are a financial planning assistant for portfolio review workflows. "
                 "Use the portfolio-planning gateway tools to inspect model inputs, inspect model "
-                "outputs, retrieve the model formulation, create governed input overrides, run "
-                "the dummy 16-week optimizer, and record override justifications. "
-                "Never present output as financial advice. Clearly state that the current math "
-                "model and daily stock data are synthetic placeholders until the dedicated "
-                "portfolio model pipeline is connected through MCP.\n\n"
+                "outputs, retrieve the model formulation, create governed input overrides, trigger "
+                "the dummy 16-week optimizer, check run status, and record override justifications. "
+                "Never present output as financial advice. When model inputs have "
+                "source=yfinance-market-data, clearly state that prices and OHLCV-derived "
+                "return/risk features come from yfinance, while holdings, cash, news context, "
+                "and the optimizer are still template/demo logic until the dedicated portfolio "
+                "model pipeline is connected through MCP. When model inputs have a synthetic "
+                "source, call that out separately.\n\n"
                 "When the user asks which skills are available, call list_agent_skills and "
                 "answer with skills first. Do not confuse skills with MCP tools. Skills are "
                 "SKILL.md operating procedures; tools are callable Gateway capabilities. "

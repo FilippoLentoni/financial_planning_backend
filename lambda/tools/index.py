@@ -53,6 +53,15 @@ MEMORY_STATE: dict[str, dict[str, Any]] = {}
 
 TOOL_CATALOG = [
     {
+        "name": "hello_world",
+        "gateway": "portfolio-planning",
+        "description": "Return a simple greeting used to smoke-test backend tool wiring.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
         "name": "get_math_model_input",
         "gateway": "portfolio-planning",
         "description": "Return the model input payload used for a portfolio optimization run.",
@@ -717,6 +726,10 @@ def list_tools(gateway: str | None = None) -> dict[str, Any]:
     return {"tools": tools, "gateway": gateway or "all"}
 
 
+def hello_world(args: dict[str, Any] | None = None) -> dict[str, str]:
+    return {"message": "hi filippo you are the best"}
+
+
 def list_portfolios() -> dict[str, Any]:
     return {
         "portfolios": [
@@ -1276,6 +1289,7 @@ TOOL_HANDLERS = {
     "healthCheck": lambda args: health_check(),
     "listGateways": lambda args: list_gateways(),
     "listTools": lambda args: list_tools(args.get("gateway")),
+    "hello_world": hello_world,
     "get_math_model_input": get_math_model_input,
     "get_math_model_output": get_math_model_output,
     "override_math_model_input": override_math_model_input,
