@@ -29,7 +29,8 @@ def test_agent_skills_are_discoverable() -> None:
         "portfolio-planning___get_math_model_output",
         "portfolio-planning___override_math_model_input",
         "portfolio-planning___get_math_model_formulation",
-        "portfolio-planning___run_math_model",
+        "portfolio-planning___trigger_math_model",
+        "portfolio-planning___get_math_model_status",
         "portfolio-planning___override_math_model",
     ]
 
@@ -53,26 +54,41 @@ def test_public_gateway_tool_catalog() -> None:
         "get_math_model_output",
         "override_math_model_input",
         "get_math_model_formulation",
-        "run_math_model",
+        "trigger_math_model",
+        "get_math_model_status",
         "override_math_model",
     }
-    assert len(tools) == 6
+    assert len(tools) == 7
     assert module._normalize_tool_name("portfolio-planning___get_math_model_input") == "get_math_model_input"
 
 
 def test_model_input_output_tools() -> None:
     module = _load_module("lambda/tools/index.py", "backend_tools_model")
-    rerun = module.run_math_model({"input_id": "demo-model-input"})
+    rerun = module.trigger_math_model({"input_id": "demo-model-input"})
     run_id = rerun["run_id"]
     input_id = rerun["input_id"]
+    status = module.get_math_model_status({"run_id": run_id})
+    assert status["status"] == "COMPLETED"
+    assert status["outputReady"] is True
 
     model_input = module.get_math_model_input({"run_id": run_id})
     assert model_input["input_id"] == input_id
     assert model_input["model_input"]["planningHorizonWeeks"] == 16
+    direct_model_input = module.get_math_model_input({"input_id": input_id})
+    assert direct_model_input["input_id"] == input_id
+    assert direct_model_input["model_input"]["portfolioId"] == "demo-growth-income"
+    positional_style_model_input = module.get_math_model_input({"run_id": input_id})
+    assert positional_style_model_input["input_id"] == input_id
+    assert positional_style_model_input["model_input"]["portfolioId"] == "demo-growth-income"
 
     model_output = module.get_math_model_output({"run_id": run_id})
     assert model_output["model_output"]["solverStatus"] == "OPTIMAL"
     assert model_output["model_output"]["plan"]["weeks"]
+    output_by_input = module.get_math_model_output({"input_id": input_id})
+    assert output_by_input["run_id"] == run_id
+    assert output_by_input["model_output"]["solverStatus"] == "OPTIMAL"
+    positional_output_by_input = module.get_math_model_output({"run_id": input_id})
+    assert positional_output_by_input["run_id"] == run_id
 
     formulation = module.get_math_model_formulation({"run_id": run_id})
     assert "objective" in formulation["formulation"]
@@ -85,7 +101,7 @@ def test_model_input_output_tools() -> None:
         }
     )
     assert override["source_input_id"] == input_id
-    overridden_rerun = module.run_math_model({"input_id": override["input_id"]})
+    overridden_rerun = module.trigger_math_model({"input_id": override["input_id"]})
     assert overridden_rerun["status"] == "COMPLETED"
     decision = module.override_math_model({"input_id": override["input_id"], "justification": "Synthetic test override."})
     assert decision["status"] == "RECORDED"
@@ -103,11 +119,8 @@ def test_model_run_ledger_and_http_contract() -> None:
     assert latest["run_id"] == created["run_id"]
     assert latest["modelUsed"]["modelId"]
     assert latest["createdAtIso"].endswith("Z")
-    assert runs["storage"]["recordTypes"] == [
-        "model-input",
-        "portfolio-optimization",
-        "model-input-override",
-    ]
+    assert "market-data" in runs["storage"]["recordTypes"]
+    assert "portfolio-optimization" in runs["storage"]["recordTypes"]
 
     response = module.handler(
         {
@@ -121,13 +134,54 @@ def test_model_run_ledger_and_http_contract() -> None:
     assert "portfolio-optimization" in response["body"]
 
 
+def test_market_data_pipeline_contract() -> None:
+    module = _load_module("lambda/tools/index.py", "backend_tools_market")
+
+    def fake_fetch(symbols, period="1y"):
+        return [
+            {
+                "symbol": symbol,
+                "source": "yfinance",
+                "asOfDate": "2026-05-15",
+                "price": 100 + index,
+                "expectedReturn": 0.05 + index / 100,
+                "risk": 0.12 + index / 100,
+                "averageDailyVolume": 1_000_000 + index,
+                "observations": 252,
+                "sector": "Technology",
+                "signal": "positive",
+                "summary": f"{symbol} fake yfinance feature.",
+            }
+            for index, symbol in enumerate(symbols)
+        ]
+
+    module._fetch_yfinance_features = fake_fetch
+    result = module.create_market_data_model_run(
+        {
+            "symbols": ["AAPL", "MSFT"],
+            "portfolio_id": "demo-growth-income",
+            "risk_target": "moderate",
+        }
+    )
+    assert result["provider"] == "yfinance"
+    assert result["input_id"].startswith("model-input-")
+    model_input = module.get_math_model_input({"input_id": result["input_id"]})["model_input"]
+    assert model_input["source"] == "yfinance-market-data"
+    assert model_input["snapshot"]["positions"][0]["dataSource"] == "yfinance"
+    assert model_input["marketContext"][0]["source"] == "yfinance"
+
+    model_output = module.get_math_model_output({"input_id": result["input_id"]})
+    assert model_output["run_id"] == result["run_id"]
+    assert model_output["model_output"]["solverStatus"] == "OPTIMAL"
+
+
 def test_mcp_proxy_local_gateway_contract() -> None:
     module = _load_module("lambda/gateway-proxy/index.py", "gateway_proxy")
 
     def fake_invoke(tool, arguments=None):
         if tool == "listTools":
-            return {"tools": [{"name": "run_math_model", "gateway": arguments["gateway"]}]}
-        if tool == "run_math_model":
+            return {"tools": [{"name": "trigger_math_model", "gateway": arguments["gateway"]}]}
+        if tool == "trigger_math_model":
             return {"run_id": "model-run-test", "status": "COMPLETED"}
         raise AssertionError(tool)
 
@@ -138,7 +192,7 @@ def test_mcp_proxy_local_gateway_contract() -> None:
             "mcpBody": {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
         }
     )
-    assert list_response["result"]["tools"][0]["name"] == "run_math_model"
+    assert list_response["result"]["tools"][0]["name"] == "trigger_math_model"
 
     call_response = module._handle_mcp(
         {
@@ -147,7 +201,7 @@ def test_mcp_proxy_local_gateway_contract() -> None:
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "run_math_model", "arguments": {"input_id": "demo-model-input"}},
+                "params": {"name": "trigger_math_model", "arguments": {"input_id": "demo-model-input"}},
             },
         }
     )
@@ -161,5 +215,6 @@ if __name__ == "__main__":
     test_public_gateway_tool_catalog()
     test_model_input_output_tools()
     test_model_run_ledger_and_http_contract()
+    test_market_data_pipeline_contract()
     test_mcp_proxy_local_gateway_contract()
     print("OK")
